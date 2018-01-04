@@ -1447,7 +1447,12 @@ status_t compileResourceFile(Bundle* bundle,
                 }
             } else if (strcmp16(block.getElementName(&len), style16.string()) == 0) {
                 curTag = &style16;
-                curType = style16;
+                ssize_t attri = block.indexOfAttribute(NULL, "type");
+                if (attri >= 0) {
+                    curType = String16(block.getAttributeStringValue(attri, &len));
+                } else {
+                    curType = style16;
+                }
                 curIsBag = true;
             } else if (strcmp16(block.getElementName(&len), plurals16.string()) == 0) {
                 curTag = &plurals16;
@@ -4037,18 +4042,18 @@ status_t ResourceTable::Type::applyPublicEntryOrder()
     }
 
     const size_t NP = mPublic.size();
-    //printf("Ordering %d configs from %d public defs\n", N, NP);
+    printf("Ordering %d configs from %d public defs\n", (int)N, (int)NP);
     size_t j;
     for (j=0; j<NP; j++) {
         const String16& name = mPublic.keyAt(j);
         const Public& p = mPublic.valueAt(j);
         int32_t idx = Res_GETENTRY(p.ident);
-        //printf("Looking for entry \"%s\"/\"%s\" (0x%08x) in %d...\n",
-        //       String8(mName).string(), String8(name).string(), p.ident, N);
+        printf("Looking for entry \"%s\"/\"%s\" (0x%08x) in %d...\n",
+               String8(mName).string(), String8(name).string(), p.ident, (int)N);
         bool found = false;
         for (i=0; i<N; i++) {
             sp<ConfigList> e = origOrder.itemAt(i);
-            //printf("#%d: \"%s\"\n", i, String8(e->getName()).string());
+            printf("#%d: \"%s\"\n", (int)i, String8(e->getName()).string());
             if (e->getName() == name) {
                 if (idx >= (int32_t)mOrderedConfigs.size()) {
                     mOrderedConfigs.resize(idx + 1);
@@ -4085,7 +4090,7 @@ status_t ResourceTable::Type::applyPublicEntryOrder()
         }
     }
 
-    //printf("Copying back in %d non-public configs, have %d\n", N, origOrder.size());
+    printf("Copying back in %d non-public configs, have %d\n", (int)N, (int)origOrder.size());
     
     if (N != origOrder.size()) {
         printf("Internal error: remaining private symbol count mismatch\n");

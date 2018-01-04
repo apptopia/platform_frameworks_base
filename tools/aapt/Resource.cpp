@@ -29,7 +29,7 @@
 #endif
 
 // Set to true for noisy debug output.
-static const bool kIsDebug = false;
+static const bool kIsDebug = true;
 
 // Number of threads to use for preprocessing images.
 static const size_t MAX_THREADS = 4;
@@ -214,7 +214,8 @@ bool isValidResourceType(const String8& type)
         || type == "transition" || type == "font"
         || type == "drawable" || type == "layout"
         || type == "values" || type == "xml" || type == "raw"
-        || type == "color" || type == "menu" || type == "mipmap";
+        || type == "color" || type == "menu" || type == "mipmap"
+        || type == "layout3" || type == "layout2" || type == "raw2" || type == "drawable3" || type == "drawable2";
 }
 
 static status_t parsePackage(Bundle* bundle, const sp<AaptAssets>& assets,
@@ -1290,26 +1291,36 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
     collect_files(assets, resources);
 
     sp<ResourceTypeSet> drawables;
+    sp<ResourceTypeSet> drawable2s;
+    sp<ResourceTypeSet> drawable3s;
     sp<ResourceTypeSet> layouts;
+    sp<ResourceTypeSet> layout2s;
+    sp<ResourceTypeSet> layout3s;
     sp<ResourceTypeSet> anims;
     sp<ResourceTypeSet> animators;
     sp<ResourceTypeSet> interpolators;
     sp<ResourceTypeSet> transitions;
     sp<ResourceTypeSet> xmls;
     sp<ResourceTypeSet> raws;
+    sp<ResourceTypeSet> raw2s;
     sp<ResourceTypeSet> colors;
     sp<ResourceTypeSet> menus;
     sp<ResourceTypeSet> mipmaps;
     sp<ResourceTypeSet> fonts;
 
     ASSIGN_IT(drawable);
+    ASSIGN_IT(drawable2);
+    ASSIGN_IT(drawable3);
     ASSIGN_IT(layout);
+    ASSIGN_IT(layout2);
+    ASSIGN_IT(layout3);
     ASSIGN_IT(anim);
     ASSIGN_IT(animator);
     ASSIGN_IT(interpolator);
     ASSIGN_IT(transition);
     ASSIGN_IT(xml);
     ASSIGN_IT(raw);
+    ASSIGN_IT(raw2);
     ASSIGN_IT(color);
     ASSIGN_IT(menu);
     ASSIGN_IT(mipmap);
@@ -1327,13 +1338,18 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
     }
     // apply the overlay files to the base set
     if (!applyFileOverlay(bundle, assets, &drawables, "drawable") ||
+            !applyFileOverlay(bundle, assets, &drawable2s, "drawable2") ||
+            !applyFileOverlay(bundle, assets, &drawable3s, "drawable3") ||
             !applyFileOverlay(bundle, assets, &layouts, "layout") ||
+            !applyFileOverlay(bundle, assets, &layout2s, "layout2") ||
+            !applyFileOverlay(bundle, assets, &layout3s, "layout3") ||
             !applyFileOverlay(bundle, assets, &anims, "anim") ||
             !applyFileOverlay(bundle, assets, &animators, "animator") ||
             !applyFileOverlay(bundle, assets, &interpolators, "interpolator") ||
             !applyFileOverlay(bundle, assets, &transitions, "transition") ||
             !applyFileOverlay(bundle, assets, &xmls, "xml") ||
             !applyFileOverlay(bundle, assets, &raws, "raw") ||
+            !applyFileOverlay(bundle, assets, &raw2s, "raw2") ||
             !applyFileOverlay(bundle, assets, &colors, "color") ||
             !applyFileOverlay(bundle, assets, &menus, "menu") ||
             !applyFileOverlay(bundle, assets, &fonts, "font") ||
@@ -1349,6 +1365,34 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
         }
         if (err == NO_ERROR) {
             err = makeFileResources(bundle, assets, &table, drawables, "drawable");
+            if (err != NO_ERROR) {
+                hasErrors = true;
+            }
+        } else {
+            hasErrors = true;
+        }
+    }
+
+    if (drawable2s != NULL) {
+        if (bundle->getOutputAPKFile() != NULL) {
+            err = preProcessImages(bundle, assets, drawable2s, "drawable2");
+        }
+        if (err == NO_ERROR) {
+            err = makeFileResources(bundle, assets, &table, drawable2s, "drawable2");
+            if (err != NO_ERROR) {
+                hasErrors = true;
+            }
+        } else {
+            hasErrors = true;
+        }
+    }
+
+    if (drawable3s != NULL) {
+        if (bundle->getOutputAPKFile() != NULL) {
+            err = preProcessImages(bundle, assets, drawable3s, "drawable3");
+        }
+        if (err == NO_ERROR) {
+            err = makeFileResources(bundle, assets, &table, drawable3s, "drawable3");
             if (err != NO_ERROR) {
                 hasErrors = true;
             }
@@ -1380,6 +1424,20 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
 
     if (layouts != NULL) {
         err = makeFileResources(bundle, assets, &table, layouts, "layout");
+        if (err != NO_ERROR) {
+            hasErrors = true;
+        }
+    }
+
+    if (layout2s != NULL) {
+        err = makeFileResources(bundle, assets, &table, layout2s, "layout2");
+        if (err != NO_ERROR) {
+            hasErrors = true;
+        }
+    }
+
+    if (layout3s != NULL) {
+        err = makeFileResources(bundle, assets, &table, layout3s, "layout3");
         if (err != NO_ERROR) {
             hasErrors = true;
         }
@@ -1422,6 +1480,13 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
 
     if (raws != NULL) {
         err = makeFileResources(bundle, assets, &table, raws, "raw");
+        if (err != NO_ERROR) {
+            hasErrors = true;
+        }
+    }
+
+    if (raw2s != NULL) {
+        err = makeFileResources(bundle, assets, &table, raw2s, "raw2");
         if (err != NO_ERROR) {
             hasErrors = true;
         }
@@ -1505,6 +1570,51 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
         err = NO_ERROR;
     }
 
+    if (layout2s != NULL) {
+        ResourceDirIterator it(layout2s, String8("layout2"));
+        while ((err=it.next()) == NO_ERROR) {
+            String8 src = it.getFile()->getPrintableSource();
+            err = compileXmlFile(bundle, assets, String16(it.getBaseName()),
+                    it.getFile(), &table, xmlFlags);
+            // Only verify IDs if there was no error and the file is non-empty.
+            if (err == NO_ERROR && it.getFile()->hasData()) {
+                ResXMLTree block;
+                block.setTo(it.getFile()->getData(), it.getFile()->getSize(), true);
+                checkForIds(src, block);
+            } else {
+                hasErrors = true;
+            }
+        }
+
+        if (err < NO_ERROR) {
+            hasErrors = true;
+        }
+        err = NO_ERROR;
+    }
+
+    if (layout3s != NULL) {
+        ResourceDirIterator it(layout3s, String8("layout3"));
+        while ((err=it.next()) == NO_ERROR) {
+            String8 src = it.getFile()->getPrintableSource();
+            err = compileXmlFile(bundle, assets, String16(it.getBaseName()),
+                    it.getFile(), &table, xmlFlags);
+            // Only verify IDs if there was no error and the file is non-empty.
+            if (err == NO_ERROR && it.getFile()->hasData()) {
+                ResXMLTree block;
+                block.setTo(it.getFile()->getData(), it.getFile()->getSize(), true);
+                checkForIds(src, block);
+            } else {
+                hasErrors = true;
+            }
+        }
+
+        if (err < NO_ERROR) {
+            hasErrors = true;
+        }
+        err = NO_ERROR;
+    }
+
+
     if (anims != NULL) {
         ResourceDirIterator it(anims, String8("anim"));
         while ((err=it.next()) == NO_ERROR) {
@@ -1587,6 +1697,36 @@ status_t buildResources(Bundle* bundle, const sp<AaptAssets>& assets, sp<ApkBuil
 
     if (drawables != NULL) {
         ResourceDirIterator it(drawables, String8("drawable"));
+        while ((err=it.next()) == NO_ERROR) {
+            err = postProcessImage(bundle, assets, &table, it.getFile());
+            if (err != NO_ERROR) {
+                hasErrors = true;
+            }
+        }
+
+        if (err < NO_ERROR) {
+            hasErrors = true;
+        }
+        err = NO_ERROR;
+    }
+
+    if (drawable2s != NULL) {
+        ResourceDirIterator it(drawable2s, String8("drawable2"));
+        while ((err=it.next()) == NO_ERROR) {
+            err = postProcessImage(bundle, assets, &table, it.getFile());
+            if (err != NO_ERROR) {
+                hasErrors = true;
+            }
+        }
+
+        if (err < NO_ERROR) {
+            hasErrors = true;
+        }
+        err = NO_ERROR;
+    }
+
+    if (drawable3s != NULL) {
+        ResourceDirIterator it(drawable3s, String8("drawable3"));
         while ((err=it.next()) == NO_ERROR) {
             err = postProcessImage(bundle, assets, &table, it.getFile());
             if (err != NO_ERROR) {
